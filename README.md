@@ -31,11 +31,13 @@ The Azure CLI is the only prerequisite. If you deploy from the Azure CloudShell 
 
 For simplicity we're going to pass new parameters for the values.yaml at runtime, normally you'd customise a copy of the values.yaml for your deployed environment.
 
+> Note: You will be prompted for certificate passphrases during these scripts, however the scripts are intentionally very generic and won't need customising before running in your environment
+
 ```bash
 rg=conaks
 
 az group create -n $rg -l eastus
-DEP=$(az deployment group create -g conaks -f .\main.bicep)
+DEP=$(az deployment group create -g $rg -f main.bicep)
 
 # Get the Aks cluster name
 AksName=$(echo $DEP | jq -r '.properties.outputs.aksName.value')
@@ -52,23 +54,24 @@ APPPW=$(echo $SP | jq -r '.password')
 
 az aks get-credentials -n $AksName -g $rg
 
-# Generate a signing key 
+# Generate a signing key (you'll be prompted for a passphrase that you'll need to remember!)
 docker trust key generate root
 ```
 
-Because of the level of configuration specific to your environment, it's recommended that you leverage your own values.yaml file.
-For the sake of a quick sample this code passed all of the commands are passed during the install chart command.
+Because of the level of configuration specific to your environment, it's recommended that you leverage your own values.yaml file for the Helm chart installation on the cluster.
+For the sake of ease and repeatability, another option is provided where we pass all of the variable values during the install chart command.
 
-### 1. Overriding parameters on chart install
+### Option 1. Overriding parameters on chart install
 
 ```bash
-#
-helm upgrade --install connaisseur connaisseur/helm --atomic --create-namespace --namespace connaisseur --set validators[2].auth.username=$APPID,validators[2].auth.password=$APPPW,validators[2].is_acr=True;
+signingKey=$(cat root.pub)
+
+helm upgrade --install connaisseur connaisseur/helm --atomic --create-namespace --namespace connaisseur --set validators[2].host=$AcrLoginServer,validators[2].trust_roots[0].key=$signingKey,validators[2].auth.username=$APPID,validators[2].auth.password=$APPPW,validators[2].is_acr=True;
 
 kubectl get all -n connaisseur
 ```
 
-### 2. Using a values.yaml
+### Option 2. Using a values.yaml
 
 Copy the values.yaml from the Connaisseur repo and customised the default validators section like this, replacing the redacted values with the ones from the appropriate variables above;
 
@@ -92,6 +95,8 @@ Then install Connaisseur.
 
 ```bash
 helm upgrade --install connaisseur connaisseur/helm --atomic --create-namespace --namespace connaisseur -f localvalues.yaml --debug;
+
+kubectl get all -n connaisseur
 ```
 
 ## The Result
@@ -102,17 +107,17 @@ kubectl get po -n connaisseur
 
 ```text
 NAME                                      READY   STATUS    RESTARTS   AGE
-connaisseur-deployment-85d5c8b995-ghtcw   1/1     Running   0          74s
-connaisseur-deployment-85d5c8b995-knzwd   1/1     Running   0          74s
-connaisseur-deployment-85d5c8b995-tfj24   1/1     Running   0          74s
+connaisseur-deployment-85d5c8b995   1/1     Running   0          74s
+connaisseur-deployment-85d5c8b995   1/1     Running   0          74s
+connaisseur-deployment-85d5c8b995   1/1     Running   0          74s
 ```
 
 ### Lets test it!
 
-Firstly lets test with the image thats already in our ACR that hasn't been signed. We hope that this fails.
+Firstly lets test with the image that's already in our ACR that hasn't been signed. We hope that this fails.
 
 ```bash
-kubectl run docs-not-signed --image=$acrname.azurecr.io/azuredocs/azure-vote-front:v2
+kubectl run docs-not-signed --image=$AcrName.azurecr.io/azuredocs/azure-vote-front:v2
 
 Error from server: admission webhook "connaisseur-svc.connaisseur.svc" denied the request: Unable to get timestamp trust data from default.
 ```
@@ -122,31 +127,31 @@ Ok, so that works great. Now lets push a signed image to the ACR.
 First we'll need to give ourselves RBAC.
 
 ```bash
-currentuser=$(az ad signed-in-user show --query id -o tsv)
-az role assignment create --scope $acrId --role AcrImageSigner --assignee $currentuser
+currentUser=$(az ad signed-in-user show --query id -o tsv)
+az role assignment create --scope $acrId --role AcrImageSigner --assignee $currentUser
 ```
 
 ```bash
 # Login to the ACR with Docker
-token=$(az acr login -n $ACRNAME --expose-token)
-ACRTOKEN=$(echo $TOKEN | jq -r ".accessToken")
+token=$(az acr login -n $AcrName --expose-token)
+ACRTOKEN=$(echo $token | jq -r ".accessToken")
 LOGINSERVER=$(echo $TOKEN | jq -r ".loginServer")
 echo $ACRTOKEN | docker login $LOGINSERVER -u 00000000-0000-0000-0000-000000000000 --password-stdin
 
-docker pull $acrname.azurecr.io/azuredocs/azure-vote-front:v2
+docker pull $AcrName.azurecr.io/azuredocs/azure-vote-front:v2
 
 # Lets check the ImageId of the azuredocs/azure-vote-front:v2 image
 docker images
 imageId=09e5719a89a8
 
 # Re-tag to v3
-docker tag $imageId "$acrname.azurecr.io/azuredocs/azure-vote-front:v3"
+docker tag $imageId "$AcrName.azurecr.io/azuredocs/azure-vote-front:v3"
 
 # Push a signed image
-docker push "$acrname.azurecr.io/azuredocs/azure-vote-front:v3" --disable-content-trust=false
+docker push "$AcrName.azurecr.io/azuredocs/azure-vote-front:v3" --disable-content-trust=false
 
 # Test running the image in k8s
-kubectl run docs-signed --image=$acrname.azurecr.io/azuredocs/azure-vote-front:v3
+kubectl run docs-signed --image=$AcrName.azurecr.io/azuredocs/azure-vote-front:v3
 
 pod/docs-signed created
 ```
@@ -156,7 +161,7 @@ pod/docs-signed created
 
 This repo uses git submodules. The following commands were run to clone the respective repositories at a point in time.
 This was done rather than forking as
-- This project will not be contributing back to the Petclinic sample
+- This project will not be contributing back to the connaisseur sample
 - Submodules captures the repo at a point in time, which is good for our sample. We can fetch latest and test as this sample is periodically reviewed.
 
 ```bash
