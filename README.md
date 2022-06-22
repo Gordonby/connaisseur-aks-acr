@@ -76,6 +76,13 @@ kubectl get all -n connaisseur
 
 Copy the values.yaml from the Connaisseur repo and customised the default validators section like this, replacing the redacted values with the ones from the appropriate variables above;
 
+```bash
+echo "host = $AcrLoginServer"
+echo "trust_roots default key = $(cat root.pub)"
+echo "auth username = $APPID"
+echo "auth password = $APPPW"
+```
+
 ```yml
   - name: default
     type: notaryv1
@@ -129,14 +136,14 @@ First we'll need to give ourselves RBAC.
 
 ```bash
 currentUser=$(az ad signed-in-user show --query id -o tsv)
-az role assignment create --scope $acrId --role AcrImageSigner --assignee $currentUser
+az role assignment create --scope $AcrId --role AcrImageSigner --assignee $currentUser
 ```
 
 ```bash
 # Login to the ACR with Docker
 token=$(az acr login -n $AcrName --expose-token)
 ACRTOKEN=$(echo $token | jq -r ".accessToken")
-LOGINSERVER=$(echo $TOKEN | jq -r ".loginServer")
+LOGINSERVER=$(echo $token | jq -r ".loginServer")
 echo $ACRTOKEN | docker login $LOGINSERVER -u 00000000-0000-0000-0000-000000000000 --password-stdin
 
 docker pull $AcrName.azurecr.io/azuredocs/azure-vote-front:v2
