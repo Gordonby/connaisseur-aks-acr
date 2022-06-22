@@ -1,6 +1,7 @@
 # connaisseur-aks-acr
 
-A sample of using connaisseur with AKS / ACR. A massive thanks to Kevin Harris for helping me with this sample 😛
+A sample of using connaisseur with AKS / ACR. A massive thanks to [Kevin Harris](https://github.com/kevingbb) for helping me with this sample 😛
+I'll likely re-home it to github.com/azure-samples once it's been reviewed.
 
 `repo status = works if you use the localvalues.yaml route`
 
@@ -16,14 +17,12 @@ Connaisseur intercepts Kubernetes resource creation / update requests sent to th
  
 ### ACR
 
-Provides hosting of container images where they can be [scanned by Microsoft Defender](https://docs.microsoft.com/azure/defender-for-cloud/defender-for-containers-introduction?tabs=defender-for-container-arch-aks#scanning-images-in-acr-registries) before being used in Kubernetes.
+Provides hosting of container images where content trust can be established.
+Additionally has the benefits of container images being [scanned by Microsoft Defender](https://docs.microsoft.com/azure/defender-for-cloud/defender-for-containers-introduction?tabs=defender-for-container-arch-aks#scanning-images-in-acr-registries) before being used in Kubernetes.
 
 ### AKS
 
 [AKS Construction](https://github.com/Azure/Aks-Construction) is being leveraged to deploy a secure cluster in a simple way, with an ACR already enabled for Docker Content Trust.
-
-## The bicep
-
 
 ## Lets deploy it!
 
@@ -65,9 +64,11 @@ For the sake of ease and repeatability, another option is provided where we pass
 
 ```bash
 signingKey=$(cat root.pub)
+```
 
-helm upgrade --install connaisseur connaisseur/helm --atomic --create-namespace --namespace connaisseur --set validators[2].host=$AcrLoginServer,validators[2].trust_roots[0].key=$signingKey,validators[2].auth.username=$APPID,validators[2].auth.password=$APPPW,validators[2].is_acr=True;
+~~helm upgrade --install connaisseur connaisseur/helm --atomic --create-namespace --namespace connaisseur --set validators[2].host=$AcrLoginServer,validators[2].trust_roots[0].key="$signingKey",validators[2].auth.username=$APPID,validators[2].auth.password=$APPPW,validators[2].is_acr=True --debug;~~
 
+```bash
 kubectl get all -n connaisseur
 ```
 
@@ -147,7 +148,7 @@ imageId=09e5719a89a8
 # Re-tag to v3
 docker tag $imageId "$AcrName.azurecr.io/azuredocs/azure-vote-front:v3"
 
-# Push a signed image
+# Push a signed image (You'll be prompted for your earlier passphrase, and to confirm a new passphrase)
 docker push "$AcrName.azurecr.io/azuredocs/azure-vote-front:v3" --disable-content-trust=false
 
 # Test running the image in k8s
@@ -155,7 +156,6 @@ kubectl run docs-signed --image=$AcrName.azurecr.io/azuredocs/azure-vote-front:v
 
 pod/docs-signed created
 ```
-
 
 ## Repo Notes
 
