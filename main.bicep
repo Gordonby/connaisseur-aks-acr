@@ -1,4 +1,4 @@
-param nameseed string = 'cimagev'
+param nameseed string = 'ctrust'
 param location string =  resourceGroup().location
 
 //---------Kubernetes Construction---------
@@ -13,12 +13,14 @@ module aksconst 'aks-construction/bicep/main.bicep' = {
     enableACRTrustPolicy: true
     omsagent: true
     retentionInDays: 30
-    agentCount: 2
-    JustUseSystemPool: true
+    agentCount: 3
+    SystemPoolType: 'Standard'
   }
 }
-output AcrResourceId string = resourceId('Microsoft.ContainerRegistry/registries',aksconst.outputs.containerRegistryName)
-output AksName string = aksconst.outputs.aksClusterName
+output acrResourceId string = resourceId('Microsoft.ContainerRegistry/registries',aksconst.outputs.containerRegistryName)
+output acrHostname string = '${aksconst.outputs.containerRegistryName}.azurecr.io'
+output acrName string = aksconst.outputs.containerRegistryName
+output aksName string = aksconst.outputs.aksClusterName
 
 var containerImages = [
   'securesystemsengineering/connaisseur:v2.6.0'
