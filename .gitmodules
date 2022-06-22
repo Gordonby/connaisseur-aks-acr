@@ -1,0 +1,6 @@
+[submodule "aks-construction"]
+	path = aks-construction
+	url = https://github.com/Azure/AKS-Construction.git
+[submodule "connaisseur"]
+	path = connaisseur
+	url = https://github.com/sse-secure-systems/connaisseur.git

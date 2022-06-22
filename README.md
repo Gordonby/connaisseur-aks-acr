@@ -28,8 +28,30 @@ Provides hosting of container images where they can be [scanned by Microsoft Def
 
 The Azure CLI is the only prerequisite. If you deploy from the Azure CloudShell then this makes the process even simpler.
 
-```bash
+For simplicity we're going to pass new parameters for the values.yaml at runtime, normally you'd customise a copy of the values.yaml for your deployed environment.
 
+```bash
+az group create -n conaks -l eastus
+DEP=$(az deployment group create -g conaks -f .\main.bicep)
+
+# Get the Aks cluster name
+AksName=$(cho $DEP | jq -r '.properties.outputs.AksName.value')
+
+# Get the Container Registry Resource Id
+AcrId=$(cho $DEP | jq -r '.properties.outputs.acrResourceId.value')
+
+# Create a service principal with the Reader role on your registry
+SP=$(az ad sp create-for-rbac --name gb-connaisseur --role Reader --scopes $AcrId)
+APPID=$(echo $SP | jq -r '.appId')
+APPPW=$(echo $SP | jq -r '.password')
+
+az aks get-credentials -n $AksName -g conaks
+
+helm repo add connaisseur https://sse-secure-systems.github.io/connaisseur/charts;
+helm repo update;
+helm upgrade --install connaisseur connaisseur/helm --atomic --create-namespace --namespace connaisseur --set validators[2].auth.username=$APPID,validators[2].auth.password=$APPPW,validators[2].is_acr=True;
+
+kubectl get all -n connaisseur
 ```
 
 ## The Result
